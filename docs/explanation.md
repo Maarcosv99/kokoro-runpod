@@ -1,64 +1,64 @@
-# Sobre o Kokoro TTS
+# About Kokoro TTS
 
-## O que é Kokoro
+## What Kokoro is
 
-[Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) é um modelo open-source de Text-to-Speech (síntese de voz) com **82 milhões de parâmetros** lançado em 2024 pelo grupo `hexgrad`. Apesar do tamanho enxuto, alcança qualidade comparável a modelos 10x maiores em benchmarks subjetivos (TTS Arena).
+[Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) is an open-source Text-to-Speech model with **82 million parameters** released in 2024 by the `hexgrad` group. Despite the small footprint, it reaches quality on par with models 10× larger on subjective benchmarks (TTS Arena).
 
-Características:
+Highlights:
 
-- **Tamanho**: ~330 MB de pesos (FP32). Cabe em qualquer GPU com >1 GB de VRAM.
-- **Sample rate**: 24 kHz (suficiente pra voz humana).
-- **Multilíngue**: ~30 idiomas suportados via `misaki` (phonemizer com regras por idioma).
-- **Vozes**: pacote de "voicepacks" embutidos — não precisa de áudio de referência (não é zero-shot voice cloning, é seleção de voz pré-treinada).
-- **Licença**: Apache 2.0.
+- **Size**: ~330 MB of weights (FP32). Fits on any GPU with >1 GB of VRAM.
+- **Sample rate**: 24 kHz (plenty for human voice).
+- **Multilingual**: ~30 languages supported via `misaki` (a per-language phonemizer).
+- **Voices**: bundled "voicepacks" — no reference audio required (this is not zero-shot voice cloning, it's pre-trained voice selection).
+- **License**: Apache 2.0.
 
-## Pipeline interno
+## Internal pipeline
 
-Quando você chama `pipeline(text, voice="pf_dora", speed=1.0)`:
+When you call `pipeline(text, voice="pf_dora", speed=1.0)`:
 
-1. **Tokenização**: o texto é dividido em sentenças.
-2. **Phonemization**: cada sentença vai para o `misaki` (no PT-BR, usa um conjunto de regras + dicionário). Saída: sequência de fonemas IPA.
-3. **Modelo**: o transformer 82M consome (fonemas + voicepack) e gera espectrogramas mel.
-4. **Vocoder**: HiFi-GAN-style decoder converte mel → waveform 24 kHz.
-5. O `pipeline` é um **generator**: yielda `(graphemes, phonemes, audio)` por chunk (~uma sentença por iteração).
+1. **Tokenization**: the text is split into sentences.
+2. **Phonemization**: each sentence goes through `misaki` (for PT-BR, a rule set + dictionary). Output: an IPA phoneme sequence.
+3. **Model**: the 82M transformer consumes (phonemes + voicepack) and produces mel spectrograms.
+4. **Vocoder**: a HiFi-GAN-style decoder turns mel into a 24 kHz waveform.
+5. The `pipeline` is a **generator**: it yields `(graphemes, phonemes, audio)` per chunk (~one sentence per iteration).
 
-Por isso o handler concatena os chunks com `np.concatenate` antes de codificar.
+That's why the handler concatenates chunks with `np.concatenate` before encoding.
 
-## Vozes PT-BR
+## PT-BR voices
 
-| Voice ID    | Gênero    | Características                              |
-| ----------- | --------- | -------------------------------------------- |
-| `pf_dora`   | Feminina  | Tom geral, timbre claro. Default do worker.  |
-| `pm_alex`   | Masculina | Tom neutro / locução técnica.                |
-| `pm_santa`  | Masculina | Tom mais quente, festivo (originalmente persona "Papai Noel"). |
+| Voice ID    | Gender | Characteristics                                   |
+| ----------- | ------ | ------------------------------------------------- |
+| `pf_dora`   | Female | General-purpose tone, clear timbre. Worker default. |
+| `pm_alex`   | Male   | Neutral tone, suited for technical narration.     |
+| `pm_santa`  | Male   | Warmer, festive tone (originally a Santa persona).|
 
-A convenção de nomes: `<lang_prefix><gender>_<name>`. `p` = português, `f`/`m` = female/male.
+Naming convention: `<lang_prefix><gender>_<name>`. `p` = Portuguese, `f`/`m` = female/male.
 
-## Outros idiomas (referência)
+## Other languages (reference)
 
-Tecnicamente suportados pela lib (mas não pré-aquecidos neste worker):
+Technically supported by the library (but not pre-warmed in this worker):
 
-- `a` — American English (ex.: `af_heart`, `am_michael`)
-- `b` — British English (ex.: `bf_emma`, `bm_george`)
-- `j` — Japanese (ex.: `jf_alpha`)
+- `a` — American English (e.g. `af_heart`, `am_michael`)
+- `b` — British English (e.g. `bf_emma`, `bm_george`)
+- `j` — Japanese (e.g. `jf_alpha`)
 - `z` — Mandarin Chinese
 - `e` — Spanish
 - `f` — French
 - `h` — Hindi
 - `i` — Italian
 
-Veja a lista completa no [HuggingFace card](https://huggingface.co/hexgrad/Kokoro-82M).
+See the full list on the [HuggingFace card](https://huggingface.co/hexgrad/Kokoro-82M).
 
-## Limites conhecidos
+## Known limits
 
-- **Texto longo**: o `pipeline` processa frase por frase, mas textos muito longos (>1000 palavras) consomem memória progressivamente. Para textos longos, considere chunking no cliente.
-- **Pronúncia de nomes próprios**: depende do dicionário do `misaki`. Nomes raros podem ser pronunciados com sotaque estranho. Workaround: usar fonemas IPA explícitos no texto.
-- **Velocidade (`speed`)**: aceita `0.5–2.0`. Fora dessa faixa o áudio degrada.
-- **Não é voice cloning**: você não pode fornecer um áudio de referência pra clonar uma voz. Use uma voz pré-existente.
+- **Long text**: the `pipeline` processes sentence by sentence, but very long inputs (>1000 words) accumulate memory. For long texts, consider chunking on the consumer side.
+- **Proper-noun pronunciation**: depends on the `misaki` dictionary. Rare names may come out with an odd accent. Workaround: use explicit IPA phonemes in the text.
+- **Speed (`speed`)**: accepts `0.5–2.0`. Outside that range the audio degrades.
+- **Not voice cloning**: you can't supply a reference audio to clone a voice. Use one of the pre-trained voices.
 
-## Referências
+## References
 
-- Modelo: https://huggingface.co/hexgrad/Kokoro-82M
-- Lib Python: https://pypi.org/project/kokoro/
+- Model: https://huggingface.co/hexgrad/Kokoro-82M
+- Python lib: https://pypi.org/project/kokoro/
 - Phonemizer: https://github.com/hexgrad/misaki
-- TTS Arena (avaliação subjetiva): https://huggingface.co/spaces/Pendrokar/TTS-Spaces-Arena
+- TTS Arena (subjective evaluation): https://huggingface.co/spaces/Pendrokar/TTS-Spaces-Arena

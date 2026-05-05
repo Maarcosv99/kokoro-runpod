@@ -1,89 +1,89 @@
-# Decisões de design
+# Design decisions
 
-Cada seção lista a decisão, alternativas consideradas e o motivo da escolha.
+Each section lists the decision, alternatives considered, and the rationale.
 
-## Por que Queue Worker, não Load Balancer?
+## Why Queue Worker, not Load Balancer?
 
-**Decisão**: usar o formato Queue (`runpod.serverless.start(...)`) em vez de Load Balancer (FastAPI atrás de um LB).
+**Decision**: use the Queue format (`runpod.serverless.start(...)`) instead of Load Balancer (FastAPI behind an LB).
 
-**Alternativa**: rodar FastAPI/Uvicorn dentro do container e expor uma rota `/tts`. RunPod oferece esse modo via Load Balancer.
+**Alternative**: run FastAPI/Uvicorn inside the container and expose a `/tts` route. RunPod offers this mode via Load Balancer.
 
-**Motivo**:
-- Queue é mais simples — sem infraestrutura HTTP, sem precisar lidar com graceful shutdown.
-- Queue lida melhor com picos: jobs ficam na fila do RunPod sem precisar dimensionar workers reativamente.
-- O cliente já consome via API HTTP do RunPod (`/run`, `/runsync`, `/status`), então não precisamos servir HTTP nós mesmos.
-- Custo é o mesmo: cobrança é por GPU-time, não por requests.
+**Rationale**:
+- Queue is simpler — no HTTP infrastructure, no graceful shutdown to worry about.
+- Queue handles spikes better: jobs sit in RunPod's queue without forcing reactive worker scaling.
+- The consumer already calls the RunPod HTTP API (`/run`, `/runsync`, `/status`), so we don't need to serve HTTP ourselves.
+- Cost is the same: billing is by GPU-time, not by request count.
 
-## Por que `concurrency_modifier=4`?
+## Why `concurrency_modifier=4`?
 
-**Decisão**: cada worker processa até 4 jobs em paralelo.
+**Decision**: each worker handles up to 4 jobs in parallel.
 
-**Alternativa**: 1 job por worker (default do RunPod).
+**Alternative**: 1 job per worker (RunPod's default).
 
-**Motivo**:
-- Kokoro 82M é leve: ~300 MB VRAM por inferência. 4 simultâneos cabem em 16 GB com folga.
-- Inferência TTS é I/O-bound em parte (espeak-ng phonemization é CPU). 4 threads aproveitam CPU enquanto a GPU processa um chunk.
-- Reduz custo em ~75% para o mesmo throughput vs. 1:1.
+**Rationale**:
+- Kokoro 82M is light: ~300 MB VRAM per inference. 4 in parallel fit in 16 GB with room to spare.
+- TTS inference is partially I/O-bound (espeak-ng phonemization runs on CPU). 4 threads keep the CPU busy while the GPU works on a chunk.
+- Cuts cost ~75% for the same throughput vs. 1:1.
 
-**Risco mitigado**: se observarmos OOM, basta diminuir o número retornado.
+**Mitigated risk**: if we observe OOM, we just lower the returned value.
 
-## Por que pré-baixar o modelo no Dockerfile?
+## Why pre-download the model in the Dockerfile?
 
-**Decisão**: `RUN python -c "from kokoro import KPipeline; KPipeline(lang_code='p')"` na build.
+**Decision**: `RUN python -c "from kokoro import KPipeline; KPipeline(lang_code='p')"` during build.
 
-**Alternativa**: baixar no boot (handler.py) ou usar Network Volume com pesos.
+**Alternative**: download at boot (`handler.py`) or use a Network Volume for the weights.
 
-**Motivo**:
-- Build embute os pesos na imagem (~330 MB). Cold start fica em ~5s em vez de 30–60s.
-- Network Volume tem latência de rede no boot e custo extra mensal.
-- O modelo é estável (versionado pela tag da imagem), então embutir é OK.
+**Rationale**:
+- The build embeds the weights into the image (~330 MB). Cold start drops to ~5s instead of 30–60s.
+- Network Volumes add network latency at boot and a recurring monthly cost.
+- The model is stable (versioned by the image tag), so embedding it is fine.
 
-## Por que idioma único (PT-BR)?
+## Why a single language (PT-BR)?
 
-**Decisão**: defaults, warmup e docs todos em PT-BR. Outros idiomas funcionam mas não são pré-aquecidos.
+**Decision**: defaults, warmup, and docs are all PT-BR. Other languages still work but aren't pre-warmed.
 
-**Motivo**:
-- Caso de uso atual é 100% PT-BR.
-- Pré-aquecer múltiplos idiomas duplica o tempo de build e o tamanho da imagem.
-- Manter a porta aberta (a lib `kokoro` aceita `lang_code` em runtime) custa nada.
+**Rationale**:
+- Current use case is 100% PT-BR.
+- Pre-warming multiple languages doubles build time and image size.
+- Keeping the door open (the `kokoro` library accepts any `lang_code` at runtime) costs nothing.
 
-## Por que `soundfile` em vez de `pydub` ou `ffmpeg-python`?
+## Why `soundfile` instead of `pydub` or `ffmpeg-python`?
 
-**Decisão**: `soundfile` para encoding WAV/FLAC/OPUS.
+**Decision**: `soundfile` for WAV/FLAC/OPUS encoding.
 
-**Motivo**:
-- Zero dependências de subprocess (`pydub` chama `ffmpeg` via shell).
-- Suporte nativo a `BytesIO` — sem arquivos temporários.
-- Já é dependência indireta de `kokoro`.
+**Rationale**:
+- No subprocess dependencies (`pydub` shells out to `ffmpeg`).
+- Native `BytesIO` support — no temp files.
+- Already an indirect dependency of `kokoro`.
 
-**Trade-off**: MP3 não é suportado nativamente por `soundfile` (precisa LAME). Como OPUS é mais leve e melhor qualidade, MP3 ficou fora.
+**Trade-off**: MP3 isn't natively supported by `soundfile` (needs LAME). Since OPUS is lighter and higher quality, MP3 was left out.
 
-## `/run` (async + polling) vs `/runsync` (síncrono)
+## `/run` (async + polling) vs `/runsync` (sync)
 
-**Decisão**: o repo não inclui cliente. Quem consome (N8N) escolhe o endpoint conforme o caso.
+**Decision**: the repo doesn't ship a client. The consumer (N8N) picks the endpoint per situation.
 
-**Motivo**:
-- `/runsync` é o caminho natural pra textos curtos (até ~30s de áudio): uma única chamada HTTP no nó HTTP Request do N8N e o áudio volta na resposta.
-- `/runsync` tem timeout de conexão (~30s no RunPod). Textos longos estouram.
-- `/run` + polling em `/status/{id}` (ou webhook) cobre textos longos. No N8N, isso é um nó HTTP inicial + um sub-workflow / loop com Wait + HTTP até `status === "COMPLETED"`.
+**Rationale**:
+- `/runsync` is the natural path for short texts (up to ~30s of audio): a single HTTP call from the N8N HTTP Request node and the audio comes back in the response.
+- `/runsync` has a connection timeout (~30s on RunPod). Long texts blow past it.
+- `/run` + polling on `/status/{id}` (or webhook) covers long texts. In N8N, this means an initial HTTP node plus a sub-workflow / loop with Wait + HTTP until `status === "COMPLETED"`.
 
-## Por que mockar `kokoro` e `torch` nos testes?
+## Why mock `kokoro` and `torch` in tests?
 
-**Decisão**: `tests/conftest.py` injeta `MagicMock` em `sys.modules` antes de importar `handler`.
+**Decision**: `tests/conftest.py` injects `MagicMock` into `sys.modules` before importing `handler`.
 
-**Motivo**:
-- `torch` em macOS arm64 são ~200 MB. `kokoro` puxa `transformers`, `huggingface_hub` etc. — install pesado.
-- Os testes validam a lógica do handler (parsing de input, encoding, geração da resposta), não o modelo em si.
-- Evita instalar `espeak-ng` no host pra rodar testes.
-- CI roda em Python 3.11 e completa em segundos.
+**Rationale**:
+- `torch` on macOS arm64 is ~200 MB. `kokoro` pulls `transformers`, `huggingface_hub`, etc. — heavy install.
+- Tests validate handler logic (input parsing, encoding, response shape), not the model itself.
+- Avoids requiring `espeak-ng` on the host to run tests.
+- CI runs on Python 3.11 and finishes in seconds.
 
-**Trade-off**: bug que só aparece com `kokoro` real (ex.: assinatura mudada de `KPipeline.__call__`) só é pego em integração. Mitigado pela própria build do Docker, que importa `kokoro` de verdade.
+**Trade-off**: bugs that only show up with real `kokoro` (e.g. a changed `KPipeline.__call__` signature) only get caught at integration time. Mitigated by the Docker build itself, which imports `kokoro` for real.
 
-## Por que GitHub Integration em vez de RunPod Hub?
+## Why GitHub Integration instead of RunPod Hub?
 
-**Decisão**: deploy via Custom Source → GitHub Repository.
+**Decision**: deploy via Custom Source → GitHub Repository.
 
-**Motivo**:
-- Hub é mais voltado a publicar templates reutilizáveis pra outros usuários.
-- GitHub Integration faz auto-build a cada push em `main`.
-- Sem esforço extra pra publicar (e sem versão "pública" que não queremos).
+**Rationale**:
+- The Hub is geared toward publishing reusable templates for other users.
+- GitHub Integration auto-builds on every push to `main`.
+- No extra effort to publish (and no "public" version we don't want).

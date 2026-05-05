@@ -1,10 +1,10 @@
 # kokoro-runpod
 
-Worker Serverless do RunPod (formato Queue) que executa o modelo **Kokoro TTS v1.0** (`hexgrad/Kokoro-82M`) com foco em **português brasileiro**.
+RunPod Serverless worker (Queue format) that runs the **Kokoro TTS v1.0** model (`hexgrad/Kokoro-82M`) with a focus on **Brazilian Portuguese**.
 
-## Setup local
+## Local setup
 
-Pré-requisito: Python 3.11+ (no Mac, Python 3.13 do sistema funciona — os testes mockam `kokoro` e `torch`).
+Prerequisite: Python 3.11+ (on macOS the system's Python 3.13 works fine — the tests mock `kokoro` and `torch`).
 
 ```bash
 python3 -m venv .venv
@@ -15,43 +15,43 @@ mypy handler.py
 pytest -v
 ```
 
-Para rodar o handler de verdade localmente (com kokoro instalado, requer `espeak-ng` no host):
+To run the handler for real locally (with `kokoro` installed; requires `espeak-ng` on the host):
 
 ```bash
 brew install espeak-ng libsndfile         # macOS
 pip install -r requirements.txt
-python handler.py                         # SDK do runpod lê test_input.json automaticamente
+python handler.py                         # the runpod SDK reads test_input.json automatically
 ```
 
-## Build Docker local
+## Local Docker build
 
 ```bash
 docker build --platform linux/amd64 -t kokoro-worker:dev .
 ```
 
-A build pré-baixa os pesos do Kokoro para PT-BR — o primeiro build leva alguns minutos por isso, mas o cold start em produção fica em segundos.
+The build pre-downloads the Kokoro PT-BR weights — the first build takes a few minutes because of that, but the production cold start drops to seconds.
 
-## Deploy no RunPod via GitHub Integration
+## Deploy to RunPod via GitHub Integration
 
-1. Faça push deste repositório para o GitHub.
-2. Console RunPod → **Serverless** → **New Endpoint**.
-3. **Custom Source** → **GitHub Repository** → conecte sua conta e selecione o repo.
-4. Branch: `main`. Dockerfile path: `Dockerfile` (raiz).
+1. Push this repository to GitHub.
+2. RunPod console → **Serverless** → **New Endpoint**.
+3. **Custom Source** → **GitHub Repository** → connect your account and pick the repo.
+4. Branch: `main`. Dockerfile path: `Dockerfile` (root).
 5. **Endpoint Type**: **Queue**.
-6. **GPU**: 16 GB. Marque múltiplas opções para evitar indisponibilidade — recomendado: `A4000`, `RTX 4000 Ada`, `L4`.
+6. **GPU**: 16 GB. Tick multiple options to avoid availability issues — recommended: `A4000`, `RTX 4000 Ada`, `L4`.
 7. Workers: `Active 5`, `Max 30`.
 8. `Idle Timeout: 5s`, `FlashBoot: ON`, `Execution Timeout: 300s`.
-9. (Opcional) Env vars no console: `DEFAULT_LANG=p`, `DEFAULT_VOICE=pf_dora`. Já são defaults no código, mas explícitos facilitam debug.
-10. Após o deploy, copie o **Endpoint ID** e gere uma **API Key** em Settings → API Keys. No N8N, configure as credenciais HTTP / variáveis de ambiente do workflow:
+9. (Optional) Env vars in the console: `DEFAULT_LANG=p`, `DEFAULT_VOICE=pf_dora`. These are already the code defaults, but setting them explicitly makes debugging easier.
+10. After deploy, copy the **Endpoint ID** and generate an **API Key** in Settings → API Keys. In N8N, configure the HTTP credentials / workflow environment variables:
     - `RUNPOD_ENDPOINT_ID=...`
     - `RUNPOD_API_KEY=...`
 
-## Schema de input
+## Input schema
 
 ```json
 {
   "input": {
-    "text": "string (obrigatório)",
+    "text": "string (required)",
     "voice": "string (default: pf_dora)",
     "lang_code": "string (default: p)",
     "speed": "float (default: 1.0)",
@@ -60,7 +60,7 @@ A build pré-baixa os pesos do Kokoro para PT-BR — o primeiro build leva algun
 }
 ```
 
-## Schema de output
+## Output schema
 
 ```json
 {
@@ -73,9 +73,9 @@ A build pré-baixa os pesos do Kokoro para PT-BR — o primeiro build leva algun
 }
 ```
 
-Em caso de erro: `{ "error": "mensagem" }`.
+On error: `{ "error": "message" }`.
 
-## Exemplo curl
+## curl example
 
 ```bash
 curl -X POST "https://api.runpod.ai/v2/$RUNPOD_ENDPOINT_ID/runsync" \
@@ -91,35 +91,35 @@ curl -X POST "https://api.runpod.ai/v2/$RUNPOD_ENDPOINT_ID/runsync" \
   }'
 ```
 
-## Vozes PT-BR
+## PT-BR voices
 
-| Voice ID    | Gênero    | Observação                |
-| ----------- | --------- | ------------------------- |
-| `pf_dora`   | Feminina  | Default — boa pra geral.  |
-| `pm_alex`   | Masculina | Tom neutro / locução.     |
-| `pm_santa`  | Masculina | Tom mais quente / festivo.|
+| Voice ID    | Gender | Notes                              |
+| ----------- | ------ | ---------------------------------- |
+| `pf_dora`   | Female | Default — solid general-purpose.   |
+| `pm_alex`   | Male   | Neutral tone, good for narration.  |
+| `pm_santa`  | Male   | Warmer, festive tone.              |
 
-> Outros idiomas (`a` inglês americano, `b` inglês britânico, `j` japonês, etc.) são tecnicamente suportados pela lib `kokoro`, mas **fora do escopo deste worker**: não são pré-aquecidos no Dockerfile e podem causar cold start ao serem solicitados em runtime.
+> Other languages (`a` American English, `b` British English, `j` Japanese, etc.) are technically supported by the `kokoro` library but **out of scope for this worker**: they are not pre-warmed in the Dockerfile and may incur a cold start when first requested at runtime.
 
-## Variáveis de ambiente
+## Environment variables
 
-| Var              | Default     | Descrição                                         |
-| ---------------- | ----------- | ------------------------------------------------- |
-| `DEFAULT_LANG`   | `p`         | `lang_code` usado quando o request não informar.  |
-| `DEFAULT_VOICE`  | `pf_dora`   | Voz usada quando o request não informar.          |
-| `HF_HOME`        | `/app/.cache/huggingface` | Cache do HuggingFace dentro da imagem. |
+| Var              | Default     | Description                                    |
+| ---------------- | ----------- | ---------------------------------------------- |
+| `DEFAULT_LANG`   | `p`         | `lang_code` used when the request omits it.    |
+| `DEFAULT_VOICE`  | `pf_dora`   | Voice used when the request omits it.          |
+| `HF_HOME`        | `/app/.cache/huggingface` | HuggingFace cache inside the image. |
 
-## Pontos críticos
+## Critical notes
 
-- **`concurrency_modifier=4`**: cada worker GPU processa até 4 jobs em paralelo. Kokoro 82M consome ~300MB VRAM por inferência, então 4× cabe folgado em 16 GB. Sem isso, custo sobe ~4×.
-- **Modelo embutido na imagem**: `RUN python -c "from kokoro import KPipeline; KPipeline(lang_code='p')"` no Dockerfile cacheia os pesos. Combinado com FlashBoot do RunPod, cold start fica em 2–5s em vez de 30–60s.
-- **`/run` (async + polling) vs `/runsync` (síncrono)**: use `/runsync` para textos curtos (<30s de áudio); use `/run` para textos longos ou quando quiser webhook.
+- **`concurrency_modifier=4`**: each GPU worker handles up to 4 jobs in parallel. Kokoro 82M consumes ~300 MB of VRAM per inference, so 4× fits comfortably in 16 GB. Without this, cost goes up roughly 4×.
+- **Model baked into the image**: `RUN python -c "from kokoro import KPipeline; KPipeline(lang_code='p')"` in the Dockerfile caches the weights. Combined with RunPod FlashBoot, cold start drops to 2–5s instead of 30–60s.
+- **`/run` (async + polling) vs `/runsync` (sync)**: use `/runsync` for short texts (<30s of audio); use `/run` for long texts or when you want a webhook.
 
-## Como consumir do N8N
+## Consuming from N8N
 
-O worker é consumido via API HTTP do RunPod — qualquer cliente que fale HTTP funciona. No N8N, use um nó **HTTP Request**:
+The worker is consumed via the RunPod HTTP API — any HTTP-capable client works. In N8N, use an **HTTP Request** node:
 
-**Caminho síncrono (recomendado para frases curtas, até ~30s de áudio):**
+**Synchronous path (recommended for short phrases, up to ~30s of audio):**
 
 - Method: `POST`
 - URL: `https://api.runpod.ai/v2/{{$env.RUNPOD_ENDPOINT_ID}}/runsync`
@@ -135,13 +135,13 @@ O worker é consumido via API HTTP do RunPod — qualquer cliente que fale HTTP 
     }
   }
   ```
-- A resposta vem com `output.audio_base64` — use um nó **Code** ou **Move Binary Data** para converter base64 → binário e gravar o arquivo.
+- The response carries `output.audio_base64` — use a **Code** or **Move Binary Data** node to convert base64 → binary and write the file.
 
-**Caminho assíncrono (textos longos):** chame `/run` para receber `{ id }`, depois `/status/{id}` em loop até `status === "COMPLETED"`. Suporta `webhook` no body para evitar polling.
+**Asynchronous path (long texts):** call `/run` to receive `{ id }`, then `/status/{id}` in a loop until `status === "COMPLETED"`. Supports a `webhook` field in the body to skip polling.
 
-## Documentação adicional
+## Additional documentation
 
-- [`docs/architecture.md`](docs/architecture.md) — diagrama e fluxo
-- [`docs/design.md`](docs/design.md) — decisões e trade-offs
-- [`docs/explanation.md`](docs/explanation.md) — sobre o modelo Kokoro
-- [`AGENT.md`](AGENT.md) — guia para colaboração com agentes de IA
+- [`docs/architecture.md`](docs/architecture.md) — diagram and flow
+- [`docs/design.md`](docs/design.md) — decisions and trade-offs
+- [`docs/explanation.md`](docs/explanation.md) — about the Kokoro model
+- [`AGENT.md`](AGENT.md) — guide for collaborating with AI agents

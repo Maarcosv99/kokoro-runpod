@@ -1,12 +1,12 @@
-# Arquitetura
+# Architecture
 
-## Visão geral
+## Overview
 
 ```mermaid
 flowchart LR
     N8N[N8N HTTP Request node]
 
-    N8N -->|POST /runsync ou /run| RUNPOD_API[RunPod API]
+    N8N -->|POST /runsync or /run| RUNPOD_API[RunPod API]
     N8N -->|GET /status/&#123;id&#125; polling| RUNPOD_API
     RUNPOD_API --> QUEUE[(Job Queue)]
 
@@ -23,30 +23,30 @@ flowchart LR
 
     AUDIO1 -->|audio_base64| RUNPOD_API
     AUDIO2 -->|audio_base64| RUNPOD_API
-    RUNPOD_API -->|response JSON| N8N
+    RUNPOD_API -->|JSON response| N8N
 ```
 
-## Componentes
+## Components
 
-- **N8N (consumidor)**: nó **HTTP Request** chama `POST /v2/{endpoint}/runsync` (síncrono, até 30s) ou `POST /v2/{endpoint}/run` + polling em `/status/{id}` (assíncrono). A resposta JSON traz `output.audio_base64`, decodificado em binário num nó **Code** ou **Move Binary Data**.
-- **RunPod API**: roteia jobs para workers livres na fila do endpoint configurado.
-- **Worker** (`handler.py`): processa até 4 jobs simultâneos por worker via `concurrency_modifier`.
-- **`KPipeline`** (`kokoro` lib): tokeniza o texto, gera fonemas (via `misaki[pt]`), sintetiza áudio chunk a chunk.
-- **`soundfile`**: codifica o numpy array final em OPUS/WAV/FLAC sem escrever em disco (`io.BytesIO`).
+- **N8N (consumer)**: an **HTTP Request** node calls `POST /v2/{endpoint}/runsync` (synchronous, up to 30s) or `POST /v2/{endpoint}/run` + polling on `/status/{id}` (asynchronous). The JSON response carries `output.audio_base64`, decoded into binary by a **Code** or **Move Binary Data** node.
+- **RunPod API**: routes jobs to free workers in the configured endpoint's queue.
+- **Worker** (`handler.py`): handles up to 4 concurrent jobs per worker via `concurrency_modifier`.
+- **`KPipeline`** (`kokoro` lib): tokenizes the text, generates phonemes (via `misaki[pt]`), synthesizes audio chunk by chunk.
+- **`soundfile`**: encodes the final numpy array into OPUS/WAV/FLAC without touching disk (`io.BytesIO`).
 
-## Fluxo de cold start
+## Cold-start flow
 
-1. RunPod sobe um container ocioso (FlashBoot pula este passo se houver snapshot).
-2. Container roda `CMD ["python3.11", "-u", "handler.py"]`.
-3. Bloco `if __name__ == "__main__"` chama `get_pipeline(DEFAULT_LANG)` → carrega o modelo PT-BR para a GPU.
-4. `runpod.serverless.start(...)` entra no loop de fetch da fila.
-5. Primeiro job é processado.
+1. RunPod spins up an idle container (FlashBoot skips this step when a snapshot exists).
+2. The container runs `CMD ["python3.11", "-u", "handler.py"]`.
+3. The `if __name__ == "__main__"` block calls `get_pipeline(DEFAULT_LANG)` → loads the PT-BR model into the GPU.
+4. `runpod.serverless.start(...)` enters the queue-fetch loop.
+5. The first job is processed.
 
-**Sem o pré-carregamento (item 3)**, o primeiro job pagaria ~10s de download HF + ~5s de load. Como os pesos já estão no filesystem (cacheados pelo `RUN python -c ...` do Dockerfile), só pagamos o load.
+**Without the pre-load (step 3)**, the first job would pay ~10s of HF download + ~5s of model loading. Because the weights are already on the filesystem (cached by the `RUN python -c ...` line in the Dockerfile), we only pay the load.
 
-**Com FlashBoot**, RunPod tira um snapshot do container já no estado pós-load. Cold start cai de ~10s para 2–5s.
+**With FlashBoot**, RunPod snapshots the container once it reaches the post-load state. Cold start drops from ~10s to 2–5s.
 
-## Fluxo de um job
+## Job flow
 
 ```mermaid
 sequenceDiagram
@@ -70,24 +70,24 @@ sequenceDiagram
 
     N->>R: GET /status/abc
     R-->>N: { status: "COMPLETED", output: { audio_base64, ... } }
-    N->>N: decode base64 → arquivo binário
+    N->>N: decode base64 → binary file
 ```
 
-## Concorrência por worker
+## Per-worker concurrency
 
-Cada worker GPU pode processar até 4 jobs simultâneos:
+Each GPU worker can process up to 4 simultaneous jobs:
 
-- O loop interno do SDK chama `concurrency_modifier(current_count)` periodicamente.
-- Enquanto o retorno (`4`) for maior que `current_count`, o worker pega novo job.
-- `KPipeline` é thread-safe pra inferência; o cache `PIPELINES` é protegido por `_PIPELINE_LOCK` apenas durante a criação inicial.
+- The SDK's internal loop calls `concurrency_modifier(current_count)` periodically.
+- As long as the return value (`4`) is greater than `current_count`, the worker pulls another job.
+- `KPipeline` is thread-safe for inference; the `PIPELINES` cache is guarded by `_PIPELINE_LOCK` only during initial creation.
 
-## Limites e custos
+## Limits and cost
 
-| Recurso             | Valor                                |
-| ------------------- | ------------------------------------ |
-| VRAM por worker     | 16 GB (4× ~300 MB para Kokoro)       |
-| Concorrência/worker | 4 jobs                               |
-| Throughput estimado | ~100 jobs/min por worker (depende do tamanho do texto) |
-| Active workers      | 5 (configurado no console)           |
-| Max workers         | 30 (auto-scale)                      |
-| Idle timeout        | 5s (worker desliga rápido pra economizar) |
+| Resource             | Value                                       |
+| -------------------- | ------------------------------------------- |
+| VRAM per worker      | 16 GB (4× ~300 MB for Kokoro)               |
+| Concurrency / worker | 4 jobs                                      |
+| Estimated throughput | ~100 jobs/min per worker (depends on text length) |
+| Active workers       | 5 (set in the console)                      |
+| Max workers          | 30 (auto-scale)                             |
+| Idle timeout         | 5s (workers shut down quickly to save cost) |
