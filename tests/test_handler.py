@@ -1,7 +1,7 @@
-"""Testes do handler RunPod do Kokoro.
+"""Tests for the Kokoro RunPod handler.
 
-`torch` e `kokoro` são mockados em `conftest.py` antes do import do handler,
-então os testes rodam sem instalar essas deps pesadas.
+`torch` and `kokoro` are mocked in `conftest.py` before `handler` is imported,
+so the tests run without installing those heavy deps.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import handler
 
 
 def _decode_response_audio(resp: dict, expected_format: str) -> np.ndarray:
-    assert resp.get("error") is None, f"resposta com erro: {resp.get('error')}"
+    assert resp.get("error") is None, f"response has error: {resp.get('error')}"
     assert resp["format"] == expected_format
     audio_bytes = base64.b64decode(resp["audio_base64"])
     decoded, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32")
@@ -42,7 +42,7 @@ def test_handler_happy_path_opus(patch_pipeline) -> None:
     assert resp["sample_rate"] == 24000
     assert resp["duration_seconds"] == pytest.approx(1.0, abs=0.05)
     audio_bytes = base64.b64decode(resp["audio_base64"])
-    # OGG container começa com magic bytes "OggS".
+    # OGG container starts with the magic bytes "OggS".
     assert audio_bytes[:4] == b"OggS"
 
 
@@ -53,7 +53,7 @@ def test_handler_wav_round_trip(patch_pipeline, dummy_audio) -> None:
     resp = handler.handler(event)
     decoded = _decode_response_audio(resp, "wav")
 
-    # WAV PCM_16 round-trip: tolerância pelo quantization noise.
+    # WAV PCM_16 round-trip: small tolerance for quantization noise.
     assert decoded.shape == dummy_audio.shape
     np.testing.assert_allclose(decoded, dummy_audio, atol=2e-4)
 
@@ -65,14 +65,14 @@ def test_handler_flac_round_trip(patch_pipeline, dummy_audio) -> None:
     resp = handler.handler(event)
     decoded = _decode_response_audio(resp, "flac")
 
-    # FLAC é lossless mas converte float32 → int16 → float32: pequena perda.
+    # FLAC is lossless but we go float32 → int16 → float32: tiny loss.
     assert decoded.shape == dummy_audio.shape
     np.testing.assert_allclose(decoded, dummy_audio, atol=2e-4)
 
 
 def test_handler_concatenates_multiple_chunks(patch_pipeline, dummy_audio) -> None:
     patch_pipeline(num_chunks=4)
-    event = {"input": {"text": "vários chunks", "format": "wav"}}
+    event = {"input": {"text": "several chunks", "format": "wav"}}
 
     resp = handler.handler(event)
     decoded = _decode_response_audio(resp, "wav")
@@ -104,10 +104,10 @@ def test_handler_pipeline_returns_no_chunks(monkeypatch) -> None:
         return iter([])
 
     monkeypatch.setattr(handler, "get_pipeline", lambda lang_code: empty_pipeline)
-    resp = handler.handler({"input": {"text": "vazio"}})
+    resp = handler.handler({"input": {"text": "empty"}})
 
     assert "error" in resp
-    assert "áudio" in resp["error"].lower() or "audio" in resp["error"].lower()
+    assert "audio" in resp["error"].lower()
 
 
 def test_handler_propagates_pipeline_exception(monkeypatch) -> None:
@@ -115,14 +115,14 @@ def test_handler_propagates_pipeline_exception(monkeypatch) -> None:
         raise RuntimeError("boom")
 
     monkeypatch.setattr(handler, "get_pipeline", lambda lang_code: boom_pipeline)
-    resp = handler.handler({"input": {"text": "ué"}})
+    resp = handler.handler({"input": {"text": "oops"}})
 
     assert "error" in resp
     assert "boom" in resp["error"]
 
 
 def test_encode_audio_unknown_format_raises(dummy_audio) -> None:
-    with pytest.raises(ValueError, match="formato não suportado"):
+    with pytest.raises(ValueError, match="unsupported format"):
         handler.encode_audio(dummy_audio, "mp3")
 
 

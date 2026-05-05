@@ -1,8 +1,8 @@
-"""Fixtures e mocks globais.
+"""Global fixtures and mocks.
 
-CRÍTICO: substituímos `torch` e `kokoro` em `sys.modules` ANTES do primeiro
-import do módulo `handler`. Isso permite rodar os testes sem instalar essas
-deps pesadas (~hundreds of MB) localmente.
+CRITICAL: we replace `torch` and `kokoro` in `sys.modules` BEFORE the first
+import of the `handler` module. This lets the tests run without installing
+those heavy deps (~hundreds of MB) locally.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-# Mocka deps pesadas antes de qualquer `import handler`.
+# Mock heavy deps before any `import handler`.
 _torch_mock = MagicMock()
 _torch_mock.cuda.is_available = MagicMock(return_value=False)
 sys.modules.setdefault("torch", _torch_mock)
@@ -23,7 +23,7 @@ sys.modules.setdefault("kokoro", MagicMock())
 
 @pytest.fixture
 def dummy_audio() -> np.ndarray:
-    """Áudio float32 sintético: 1 segundo de senoide a 440 Hz, 24 kHz."""
+    """Synthetic float32 audio: 1 second of a 440 Hz sine wave at 24 kHz."""
     sr = 24000
     duration = 1.0
     t = np.linspace(0.0, duration, int(sr * duration), endpoint=False, dtype=np.float32)
@@ -32,7 +32,7 @@ def dummy_audio() -> np.ndarray:
 
 @pytest.fixture
 def fake_pipeline_factory(dummy_audio: np.ndarray):
-    """Cria um pipeline-mock que yielda (graphemes, phonemes, audio)."""
+    """Build a mock pipeline that yields (graphemes, phonemes, audio)."""
 
     def _make(num_chunks: int = 1) -> Any:
         chunk_size = len(dummy_audio) // max(num_chunks, 1)
@@ -50,8 +50,8 @@ def fake_pipeline_factory(dummy_audio: np.ndarray):
 
 @pytest.fixture
 def patch_pipeline(monkeypatch: pytest.MonkeyPatch, fake_pipeline_factory):
-    """Substitui `handler.get_pipeline` por um pipeline mock."""
-    import handler  # import tardio: já com torch/kokoro mockados
+    """Replace `handler.get_pipeline` with a mock pipeline."""
+    import handler  # late import: torch/kokoro are already mocked
 
     def _patch(num_chunks: int = 1) -> Any:
         pipeline = fake_pipeline_factory(num_chunks)

@@ -62,6 +62,6 @@ docker build --platform linux/amd64 -t kokoro-worker:dev .
 - **Do not** install `kokoro` or `torch` in `requirements-dev.txt` — tests mock them.
 - **Do not** use FastAPI/Uvicorn — this is a Queue Worker.
 - **Do not** create `.runpod/hub.json` — deploy is via GitHub Integration, not Hub.
-- Handler error messages flow back to the consumer (N8N) as `{"error": "..."}` — write them in PT-BR (the consumer audience is PT-BR).
+- Handler error messages flow back to the consumer (N8N) as `{"error": "..."}` — write them in English. The N8N workflow forwards them to the project owner / AI agents for debugging, not to end users.
 - **No TypeScript / JavaScript / Node code** in this repo — consumption is via N8N HTTP. Don't re-add `client/`.
 - Comment only where the **why** isn't obvious from the code.

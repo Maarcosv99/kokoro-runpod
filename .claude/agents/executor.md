@@ -33,8 +33,7 @@ You are the executor subagent for kokoro-runpod. Your job is to implement approv
 - Type hints on **every** public function.
 - **No superfluous comments**: only comment the **why** when it's not obvious from the code.
 - **No dead code**: don't add fallbacks for impossible scenarios.
-- Handler error messages in PT-BR (they go to the N8N consumer).
-- Names in English, but docstrings/comments and user-facing messages in PT-BR.
+- Everything user-facing in English: code, docstrings, comments, and handler error messages. The TTS *content* synthesized by the worker is PT-BR — that's a runtime input, not source code.
 - `ruff format` defines the style — don't fight it.
 
 ## About tests

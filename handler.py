@@ -1,4 +1,4 @@
-"""RunPod Serverless Queue Worker para Kokoro TTS (PT-BR foco)."""
+"""RunPod Serverless Queue Worker for Kokoro TTS (PT-BR focus)."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ _PIPELINE_LOCK = threading.Lock()
 
 
 def get_pipeline(lang_code: str) -> KPipeline:
-    """Lazy-load thread-safe de KPipeline por idioma."""
+    """Thread-safe lazy-load of KPipeline per language."""
     pipeline = PIPELINES.get(lang_code)
     if pipeline is not None:
         return pipeline
@@ -40,7 +40,7 @@ def get_pipeline(lang_code: str) -> KPipeline:
 
 
 def encode_audio(audio: np.ndarray, fmt: str) -> bytes:
-    """Codifica um array float32 em bytes do formato escolhido (wav/flac/opus)."""
+    """Encode a float32 array into bytes of the chosen format (wav/flac/opus)."""
     buf = io.BytesIO()
     if fmt == "wav":
         sf.write(buf, audio, SAMPLE_RATE, format="WAV", subtype="PCM_16")
@@ -49,7 +49,7 @@ def encode_audio(audio: np.ndarray, fmt: str) -> bytes:
     elif fmt == "opus":
         sf.write(buf, audio, SAMPLE_RATE, format="OGG", subtype="OPUS")
     else:
-        raise ValueError(f"formato não suportado: {fmt!r}. Use um de {sorted(SUPPORTED_FORMATS)}")
+        raise ValueError(f"unsupported format: {fmt!r}. Use one of {sorted(SUPPORTED_FORMATS)}")
     return buf.getvalue()
 
 
@@ -60,12 +60,12 @@ def _to_numpy(chunk: Any) -> np.ndarray:
 
 
 def handler(event: dict[str, Any]) -> dict[str, Any]:
-    """Handler RunPod: gera TTS a partir de event['input']."""
+    """RunPod handler: generate TTS from event['input']."""
     try:
         payload = event.get("input") or {}
         text = payload.get("text")
         if not isinstance(text, str) or not text.strip():
-            return {"error": "campo 'text' é obrigatório e não pode ser vazio"}
+            return {"error": "field 'text' is required and cannot be empty"}
 
         voice = payload.get("voice") or DEFAULT_VOICE
         lang_code = payload.get("lang_code") or DEFAULT_LANG
@@ -74,13 +74,13 @@ def handler(event: dict[str, Any]) -> dict[str, Any]:
 
         if fmt not in SUPPORTED_FORMATS:
             return {
-                "error": f"format inválido: {fmt!r}. Use um de {sorted(SUPPORTED_FORMATS)}",
+                "error": f"invalid format: {fmt!r}. Use one of {sorted(SUPPORTED_FORMATS)}",
             }
 
         pipeline = get_pipeline(lang_code)
         chunks = [_to_numpy(audio) for _, _, audio in pipeline(text, voice=voice, speed=speed)]
         if not chunks:
-            return {"error": "pipeline não produziu áudio para o texto fornecido"}
+            return {"error": "pipeline produced no audio for the given text"}
 
         audio = np.concatenate(chunks).astype(np.float32, copy=False)
         audio_bytes = encode_audio(audio, fmt)
@@ -99,12 +99,12 @@ def handler(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def concurrency_modifier(_current: int) -> int:
-    """Permite até 4 jobs concorrentes por worker (Kokoro 82M é leve)."""
+    """Allow up to 4 concurrent jobs per worker (Kokoro 82M is light)."""
     return 4
 
 
 if __name__ == "__main__":
-    # Pré-carrega o idioma default no boot pra evitar cold start no primeiro job.
+    # Pre-load the default language at boot to avoid cold start on the first job.
     try:
         get_pipeline(DEFAULT_LANG)
     except Exception:
