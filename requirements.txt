@@ -1,0 +1,6 @@
+runpod>=1.7.0
+kokoro>=0.9.4
+misaki[en,pt]
+soundfile
+torch
+numpy

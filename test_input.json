@@ -1,0 +1,9 @@
+{
+  "input": {
+    "text": "Olá! Este é um teste do Kokoro em português brasileiro.",
+    "voice": "pf_dora",
+    "lang_code": "p",
+    "speed": 1.0,
+    "format": "opus"
+  }
+}

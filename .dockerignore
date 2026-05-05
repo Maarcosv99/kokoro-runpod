@@ -1,0 +1,45 @@
+# Git
+.git/
+.gitignore
+.github/
+
+# Claude Code
+.claude/
+
+# Docs e dev tooling
+docs/
+tests/
+README.md
+AGENT.md
+pyproject.toml
+requirements-dev.txt
+
+# Python local
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Secrets
+.env
+.env.*
+
+# Saídas de teste local
+*.wav
+*.opus
+*.flac
+*.mp3
