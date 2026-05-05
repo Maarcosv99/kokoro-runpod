@@ -1,67 +1,67 @@
 # AGENT.md
 
-Guia para colaboração com agentes de IA (Claude Code, Cursor, etc.) neste repositório.
+Guide for collaborating with AI agents (Claude Code, Cursor, etc.) on this repository.
 
-## O que é este projeto
+## What this project is
 
-Worker Serverless do RunPod (formato Queue) que serve **Kokoro TTS v1.0** para síntese de voz em **português brasileiro**. O consumo é feito via **N8N** (nó HTTP Request) chamando a API do RunPod (`/runsync` ou `/run` + polling). Não há cliente em código neste repositório — é só Python (worker). Detalhes em [`README.md`](README.md).
+A RunPod Serverless worker (Queue format) that serves **Kokoro TTS v1.0** for voice synthesis in **Brazilian Portuguese**. Consumption happens through **N8N** (an HTTP Request node) calling the RunPod API (`/runsync` or `/run` + polling). There's no client code in this repository — it's Python only (worker). Details in [`README.md`](README.md).
 
-## Onde encontrar informações
+## Where to find information
 
-| Pergunta                                  | Onde olhar                              |
-| ----------------------------------------- | --------------------------------------- |
-| Como rodar / fazer deploy?                | [`README.md`](README.md)                |
-| Visão geral da arquitetura?               | [`docs/architecture.md`](docs/architecture.md) |
-| Por que tal decisão foi tomada?           | [`docs/design.md`](docs/design.md)      |
-| Sobre o modelo Kokoro / vozes / limites?  | [`docs/explanation.md`](docs/explanation.md) |
-| Schema de input/output do handler?        | `README.md` + `handler.py:handler`      |
-| Como rodar testes / CI?                   | Seção "Comandos úteis" abaixo           |
+| Question                                  | Where to look                                  |
+| ----------------------------------------- | ---------------------------------------------- |
+| How to run / deploy?                      | [`README.md`](README.md)                       |
+| Architecture overview?                    | [`docs/architecture.md`](docs/architecture.md) |
+| Why was decision X made?                  | [`docs/design.md`](docs/design.md)             |
+| About the Kokoro model / voices / limits? | [`docs/explanation.md`](docs/explanation.md)   |
+| Handler input/output schema?              | `README.md` + `handler.py:handler`             |
+| How to run tests / CI?                    | "Useful commands" section below                |
 
-## Subagentes Claude Code
+## Claude Code subagents
 
-Os subagentes ficam em `.claude/agents/` e são invocados pelo Claude Code via tool `Task`. Use o agente certo pra cada fase:
+The subagents live in `.claude/agents/` and are invoked by Claude Code through the `Task` tool. Pick the right agent per phase:
 
-| Agente       | Quando usar                                                    |
-| ------------ | -------------------------------------------------------------- |
-| `researcher` | Antes de qualquer mudança que dependa de info externa (mudanças na API do `kokoro`, nova versão do SDK do RunPod, vozes novas). |
-| `planner`    | Para quebrar mudanças complexas em passos referenciando arquivos e padrões existentes. |
-| `executor`   | Para implementar planos aprovados, seguindo `ruff format`, type hints e adicionando testes. |
-| `tester`     | Para escrever / rodar testes pytest mockando `KPipeline`, e validar `ruff` + `mypy` + `pytest`. |
+| Agent        | When to use                                                                                                                  |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `researcher` | Before any change that depends on external info (changes to the `kokoro` API, a new RunPod SDK version, new voices).         |
+| `planner`    | To break complex changes into steps that reference existing files and patterns.                                              |
+| `executor`   | To implement approved plans, following `ruff format`, type hints, and adding tests.                                          |
+| `tester`     | To write / run pytest tests mocking `KPipeline`, and to enforce `ruff` + `mypy` + `pytest`.                                  |
 
-## Skills recomendadas (Claude Code)
+## Recommended skills (Claude Code)
 
-Skills nativas do Claude Code (e plugin `superpowers`) que ajudam neste projeto:
+Native Claude Code skills (and the `superpowers` plugin) that help in this project:
 
-- **`coding-guidelines`** — disciplina geral de implementação (sem código morto, sem over-engineering, sem comentários supérfluos).
-- **`superpowers:test-driven-development`** — escreva o teste antes da feature; vital pra mudanças no `handler`.
-- **`docs-writer`** — manutenção da pasta `docs/` consistente em estrutura e tom.
-- **`superpowers:verification-before-completion`** — sempre rode `ruff && mypy && pytest` antes de declarar uma tarefa concluída.
+- **`coding-guidelines`** — general implementation discipline (no dead code, no over-engineering, no superfluous comments).
+- **`superpowers:test-driven-development`** — write the test before the feature; vital for handler changes.
+- **`docs-writer`** — keep the `docs/` folder consistent in structure and tone.
+- **`superpowers:verification-before-completion`** — always run `ruff && mypy && pytest` before declaring a task done.
 
-## Comandos úteis
+## Useful commands
 
 ```bash
-# Setup (uma vez)
+# Setup (one-off)
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 
-# Loop de desenvolvimento
+# Development loop
 ruff check .                 # lint
 ruff format .                # auto-format
 mypy handler.py              # type-check
-pytest -v                    # testes (kokoro/torch são mockados)
-pytest --cov=handler         # cobertura
+pytest -v                    # tests (kokoro/torch are mocked)
+pytest --cov=handler         # coverage
 
-# Build Docker (precisa Docker Desktop)
+# Docker build (requires Docker Desktop)
 docker build --platform linux/amd64 -t kokoro-worker:dev .
 ```
 
-## Convenções
+## Conventions
 
-- **Idioma único**: PT-BR. Não adicione defaults em outras línguas sem alinhar com o dono do repo.
-- **Não** instale `kokoro` ou `torch` em `requirements-dev.txt` — testes mockam.
-- **Não** use FastAPI/Uvicorn — é Queue Worker.
-- **Não** crie arquivos `.runpod/hub.json` — deploy é via GitHub Integration, não Hub.
-- Mensagens de erro do `handler` voltam pro consumidor (N8N) como `{"error": "..."}` — escreva-as em PT-BR.
-- **Sem código TypeScript / JavaScript / Node** neste repo — o consumo é via N8N HTTP. Não readicione `client/`.
-- Comentários só onde o **porquê** não é óbvio do código.
+- **Single language**: PT-BR. Don't add defaults in other languages without checking with the repo owner.
+- **Do not** install `kokoro` or `torch` in `requirements-dev.txt` — tests mock them.
+- **Do not** use FastAPI/Uvicorn — this is a Queue Worker.
+- **Do not** create `.runpod/hub.json` — deploy is via GitHub Integration, not Hub.
+- Handler error messages flow back to the consumer (N8N) as `{"error": "..."}` — write them in PT-BR (the consumer audience is PT-BR).
+- **No TypeScript / JavaScript / Node code** in this repo — consumption is via N8N HTTP. Don't re-add `client/`.
+- Comment only where the **why** isn't obvious from the code.
