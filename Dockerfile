@@ -34,6 +34,12 @@ COPY handler.py .
 # Pré-baixa pesos do Kokoro para PT-BR durante o build (CRÍTICO contra cold start).
 # Idioma único deste worker — falha aqui significa que a versão da lib não tem PT
 # e a imagem não deve subir silenciosamente.
-RUN python3.11 -c "from kokoro import KPipeline; KPipeline(lang_code='p')"
+RUN python3.11 -c "from kokoro import KPipeline; KPipeline(lang_code='p', repo_id='hexgrad/Kokoro-82M')"
+
+# Activated only after the cache has been populated above: forces the HF Hub
+# client to use local files at runtime, eliminating the 5 HEAD requests + the
+# "unauthenticated requests" warning seen on every cold start.
+ENV HF_HUB_OFFLINE=1 \
+    HF_HUB_DISABLE_TELEMETRY=1
 
 CMD ["python3.11", "-u", "handler.py"]

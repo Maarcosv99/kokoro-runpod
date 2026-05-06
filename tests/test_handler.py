@@ -131,3 +131,41 @@ def test_handler_respects_custom_voice_and_lang(patch_pipeline) -> None:
     resp = handler.handler({"input": {"text": "x", "voice": "pm_alex", "lang_code": "p"}})
     assert resp["voice"] == "pm_alex"
     assert resp["lang_code"] == "p"
+
+
+@pytest.mark.parametrize("alias", ["pt", "PT", "pt-br", "PT_BR", "ptbr"])
+def test_lang_code_alias_normalizes_to_p(monkeypatch, fake_pipeline_factory, alias) -> None:
+    pipeline = fake_pipeline_factory(1)
+    seen: list[str] = []
+
+    def spy(lang_code: str):
+        seen.append(lang_code)
+        return pipeline
+
+    monkeypatch.setattr(handler, "get_pipeline", spy)
+    resp = handler.handler({"input": {"text": "olá", "lang_code": alias}})
+
+    assert resp.get("error") is None, resp
+    assert seen == ["p"]
+    assert resp["lang_code"] == "p"
+
+
+def test_invalid_lang_code_returns_error(monkeypatch) -> None:
+    def must_not_be_called(_lang_code: str):
+        raise AssertionError("get_pipeline should not be called for invalid lang_code")
+
+    monkeypatch.setattr(handler, "get_pipeline", must_not_be_called)
+    resp = handler.handler({"input": {"text": "x", "lang_code": "xx"}})
+
+    assert "error" in resp
+    assert "lang_code" in resp["error"]
+    assert "'xx'" in resp["error"]
+
+
+def test_normalize_lang_code_passthrough_on_single_letter() -> None:
+    assert handler.normalize_lang_code("p") == "p"
+    assert handler.normalize_lang_code("a") == "a"
+
+
+def test_normalize_lang_code_unknown_alias_passthrough() -> None:
+    assert handler.normalize_lang_code("klingon") == "klingon"
