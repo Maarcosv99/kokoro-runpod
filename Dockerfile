@@ -34,7 +34,16 @@ COPY handler.py .
 # Pré-baixa pesos do Kokoro para PT-BR durante o build (CRÍTICO contra cold start).
 # Idioma único deste worker — falha aqui significa que a versão da lib não tem PT
 # e a imagem não deve subir silenciosamente.
-RUN python3.11 -c "from kokoro import KPipeline; KPipeline(lang_code='p', repo_id='hexgrad/Kokoro-82M')"
+#
+# Voices are loaded lazily by KPipeline at runtime, so we explicitly pull the
+# PT-BR voice files via hf_hub_download — otherwise HF_HUB_OFFLINE below would
+# raise OfflineModeIsEnabled on the first inference.
+RUN python3.11 -c "\
+from kokoro import KPipeline; \
+from huggingface_hub import hf_hub_download; \
+KPipeline(lang_code='p', repo_id='hexgrad/Kokoro-82M'); \
+[hf_hub_download(repo_id='hexgrad/Kokoro-82M', filename=f'voices/{v}.pt') \
+ for v in ('pf_dora', 'pm_alex', 'pm_santa')]"
 
 # Activated only after the cache has been populated above: forces the HF Hub
 # client to use local files at runtime, eliminating the 5 HEAD requests + the
